@@ -3,7 +3,7 @@ import cv2
 
 # step 1 - load the model
 
-net = cv2.dnn.readNetFromTorch('model.pt')
+net = cv2.dnn.readNetFromTorch('best.pt')
 
 # step 2 - feed a 640x640 image to get predictions
 
@@ -78,7 +78,6 @@ for i in range(len(result_class_ids)):
     cv2.rectangle(image, box, (0, 255, 255), 2)
     cv2.rectangle(image, (box[0], box[1] - 20), (box[0] + box[2], box[1]), (0, 255, 255), -1)
     cv2.putText(image, class_list[class_id], (box[0], box[1] - 10), cv2.FONT_HERSHEY_SIMPLEX, .5, (0,0,0))
-
 
 cv2.imshow("output", image)
 cv2.waitKey()
