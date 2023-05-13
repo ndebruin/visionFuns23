@@ -3,9 +3,11 @@ import cv2
 
 # step 1 - load the model
 
-net = cv2.dnn.readNetFromTorch('best.pt')
+net = cv2.dnn.readNet('best.onnx')
 
 # step 2 - feed a 640x640 image to get predictions
+
+num_of_markers = -1
 
 def format_yolov5(frame):
 
@@ -15,69 +17,86 @@ def format_yolov5(frame):
     result[0:row, 0:col] = frame
     return result
 
-image = cv2.videoCapture(0)
-input_image = format_yolov5(image) # making the image square
-blob = cv2.dnn.blobFromImage(input_image , 1/255.0, (640, 640), swapRB=True)
-net.setInput(blob)
-predictions = net.forward()
+cap = cv2.VideoCapture(0)
 
-# step 3 - unwrap the predictions to get the object detections 
 
-class_ids = []
-confidences = []
-boxes = []
+while True:
+    ret, frame = cap.read()
 
-output_data = predictions[0]
 
-image_width, image_height, _ = input_image.shape
-x_factor = image_width / 640
-y_factor =  image_height / 640
+    input_image = format_yolov5(frame) # making the image square
+    blob = cv2.dnn.blobFromImage(input_image , 1/255.0, (640, 640), swapRB=True)
+    net.setInput(blob)
+    predictions = net.forward()
 
-for r in range(25200):
-    row = output_data[r]
-    confidence = row[4]
-    if confidence >= 0.4:
+    # step 3 - unwrap the predictions to get the object detections 
 
-        classes_scores = row[5:]
-        _, _, _, max_indx = cv2.minMaxLoc(classes_scores)
-        class_id = max_indx[1]
-        if (classes_scores[class_id] > .25):
+    class_ids = []
+    confidences = []
+    boxes = []
 
-            confidences.append(confidence)
+    output_data = predictions[0]
 
-            class_ids.append(class_id)
+    image_width, image_height, _ = input_image.shape
+    x_factor = image_width / 640
+    y_factor =  image_height / 640
 
-            x, y, w, h = row[0].item(), row[1].item(), row[2].item(), row[3].item() 
-            left = int((x - 0.5 * w) * x_factor)
-            top = int((y - 0.5 * h) * y_factor)
-            width = int(w * x_factor)
-            height = int(h * y_factor)
-            box = np.array([left, top, width, height])
-            boxes.append(box)
+    for r in range(25200):
+        row = output_data[r]
+        confidence = row[4]
+        if confidence >= 0.4:
 
-class_list = []
-with open("config_files/classes.txt", "r") as f:
-    class_list = [cname.strip() for cname in f.readlines()]
+            classes_scores = row[5:]
+            _, _, _, max_indx = cv2.minMaxLoc(classes_scores)
+            class_id = max_indx[1]
+            if (classes_scores[class_id] > .25):
 
-indexes = cv2.dnn.NMSBoxes(boxes, confidences, 0.25, 0.45) 
+                confidences.append(confidence)
 
-result_class_ids = []
-result_confidences = []
-result_boxes = []
+                class_ids.append(class_id)
 
-for i in indexes:
-    result_confidences.append(confidences[i])
-    result_class_ids.append(class_ids[i])
-    result_boxes.append(boxes[i])
+                x, y, w, h = row[0].item(), row[1].item(), row[2].item(), row[3].item() 
+                left = int((x - 0.5 * w) * x_factor)
+                top = int((y - 0.5 * h) * y_factor)
+                width = int(w * x_factor)
+                height = int(h * y_factor)
+                box = np.array([left, top, width, height])
+                boxes.append(box)
 
-for i in range(len(result_class_ids)):
+    class_list = []
+    with open("classes.txt", "r") as f:
+        class_list = [cname.strip() for cname in f.readlines()]
 
-    box = result_boxes[i]
-    class_id = result_class_ids[i]
+    indexes = cv2.dnn.NMSBoxes(boxes, confidences, 0.25, 0.45) 
 
-    cv2.rectangle(image, box, (0, 255, 255), 2)
-    cv2.rectangle(image, (box[0], box[1] - 20), (box[0] + box[2], box[1]), (0, 255, 255), -1)
-    cv2.putText(image, class_list[class_id], (box[0], box[1] - 10), cv2.FONT_HERSHEY_SIMPLEX, .5, (0,0,0))
+    result_class_ids = []
+    result_confidences = []
+    result_boxes = []
 
-cv2.imshow("output", image)
-cv2.waitKey()
+    for i in indexes:
+        result_confidences.append(confidences[i])
+        result_class_ids.append(class_ids[i])
+        result_boxes.append(boxes[i])
+
+    if(len(result_class_ids) != num_of_markers):
+        print(f"{len(result_class_ids)} Expo Markers found.")
+        num_of_markers = len(result_class_ids)
+
+    for i in range(len(result_class_ids)):
+        
+
+        box = result_boxes[i]
+        class_id = result_class_ids[i]
+
+        
+
+        cv2.rectangle(frame, box, (0, 255, 255), 2)
+        cv2.rectangle(frame, (box[0], box[1] - 20), (box[0] + box[2], box[1]), (0, 255, 255), -1)
+        cv2.putText(frame, class_list[class_id], (box[0], box[1] - 10), cv2.FONT_HERSHEY_SIMPLEX, .5, (0,0,0))
+
+    cv2.imshow("output", frame)
+    if cv2.waitKey(1) & 0xFF == ord('q'):
+        break
+
+cap.release()
+cv2.destroyAllWindows()
